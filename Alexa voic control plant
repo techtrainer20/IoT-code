@@ -1,0 +1,132 @@
+#include <ESP8266WiFi.h>
+//#include <Wire.h>
+//#include <WiFi.h>
+#include <Adafruit_MQTT.h>
+#include <Adafruit_MQTT_Client.h>
+
+#define WLAN_SSID       "Ironman"
+#define WLAN_PASS       "Pw0rdspv"
+#define AIO_SERVER      "io.adafruit.com"
+#define AIO_SERVERPORT  1883
+#define AIO_USERNAME    "vickyeee"
+#define AIO_KEY         "aio_jarp10KikhpuI29bShmpdHpBZ8Gh"
+
+
+#define relay 4// d2
+
+const int sensor_pin = A0;
+
+
+WiFiClient client;
+
+// Setup the MQTT client class by pf\assing in the WiFi client and MQTT server and login details.
+Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
+Adafruit_MQTT_Subscribe waterflow = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/waterflow");
+Adafruit_MQTT_Publish soillevel = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/soillevel");
+
+void setup()
+{
+  
+  Serial.begin(115200);
+  
+  // Connect to WiFi access point.
+  Serial.println(); Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(WLAN_SSID);
+  pinMode(relay,OUTPUT);
+  pinMode(sensor_pin,INPUT);
+
+  WiFi.begin(WLAN_SSID, WLAN_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.println("WiFi connected");
+  Serial.println("IP address: "); Serial.println(WiFi.localIP());
+  mqtt.subscribe(&waterflow);
+}
+
+float ambientCelsius = 0.0;
+float sensor = 0.0;
+int waterpump;
+void loop()
+{
+  MQTT_connect();
+  soil();
+  Adafruit_MQTT_Subscribe *subscription;
+
+  while ((subscription = mqtt.readSubscription(5000))) {
+    if (subscription == &waterflow) {
+      Serial.print(F("Got: "));
+     Serial.println((char *)waterflow.lastread);
+      
+      waterpump = atoi((char *)waterflow.lastread);
+    // if(atoi((char*) waterflow.lastread, "ON")) {
+        int pump = atoi((char *)waterflow.lastread);
+      digitalWrite(relay, !(pump));
+        
+      }
+      
+    }
+  }
+  
+
+void soil(){
+  //ambientCelsius = mlx.readAmbientTempC();
+  //moisture_percentage = mlx.readObjectTempC();
+  
+  Serial.print(F("\nSending soil level val "));
+  //Serial.print(moisture_percentage);
+  Serial.print("...");
+ float moisture_percentage;
+  //float moisture_percentage;
+  moisture_percentage = ( 100.00 - ( (analogRead(sensor_pin)/1023.00) * 100.00 ) );
+  //moisture_percentage = analogRead(sensor_pin);
+ //moisture_percentage=map(moisture_percentage,0,1023,0,255);
+  Serial.print("Soil Moisture(in Percentage) = ");
+  Serial.print(moisture_percentage);
+  Serial.println("%");
+  delay(1000);
+ 
+  
+  if (!soillevel.publish(moisture_percentage))
+  {
+    Serial.println(F("Failed"));
+  }
+  else 
+  {
+    Serial.println(F("OK!"));
+  }
+}
+
+void MQTT_connect()
+{
+  int8_t ret;
+
+  // Stop if already connected.
+  if (mqtt.connected()) {
+    return;
+  }
+
+  Serial.print("Connecting to MQTT... ");
+
+  uint8_t retries = 3;
+
+  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+    Serial.println(mqtt.connectErrorString(ret));
+    Serial.println("Retrying MQTT connection in 5 seconds...");
+    mqtt.disconnect();
+
+    delay(5000); // wait 5 seconds
+
+    retries--;
+    if (retries == 0) {
+      // basically die and wait for WDT to reset me
+      while (1);
+    }
+  }Serial.println("MQTT Connected!");
+}
+
+  
